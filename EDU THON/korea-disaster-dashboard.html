@@ -501,17 +501,17 @@ function calcRiskScore(d, type='flood') {
 }
 
 function getRiskLevel(score) {
-  if (score >= 70) return {level:'매우 높음', class:'danger', color:'#FF4D4F'};
-  if (score >= 50) return {level:'높음', class:'danger', color:'#FF7875'};
-  if (score >= 30) return {level:'보통', class:'warn', color:'#FFB800'};
-  return {level:'낮음', class:'low', color:'var(--primary)'};
+  if (score >= 70) return {level:'높음', class:'danger', color:'#EF4444'};      // 빨간색
+  if (score >= 40) return {level:'보통', class:'warn', color:'#F97316'};         // 주황색
+  if (score >= 20) return {level:'낮음', class:'warn', color:'#EAB308'};         // 노란색
+  return {level:'매우 낮음', class:'low', color:'#3B82F6'};                      // 파란색
 }
 
 function getColor(score) {
-  if (score >= 70) return '#FF4D4F';
-  if (score >= 50) return '#FF7875';
-  if (score >= 30) return '#FFB800';
-  return 'var(--primary)';
+  if (score >= 70) return '#EF4444';   // 높음: 빨간색
+  if (score >= 40) return '#F97316';   // 보통: 주황색
+  if (score >= 20) return '#EAB308';   // 낮음: 노란색
+  return '#3B82F6';                    // 매우 낮음: 파란색
 }
 
 function generateTimeSeries(baseScore, days=30) {
@@ -1512,9 +1512,11 @@ function updateAlertBanner() {
   const text = document.getElementById('alertText');
   const btnAlert = document.getElementById('btnAlert');
   const info = RISK_TYPE_INFO[currentRiskType] || RISK_TYPE_INFO.flood;
-  if (score >= 50 && d) {
-    banner.className = 'alert-banner show ' + (score >= 70 ? '' : 'warning');
-    text.textContent = d.gu+' '+d.name+' '+info.name+' 위험도 '+score+'점 ('+getRiskLevel(score).level+') — 대피 경로 확인 필요';
+  const level = getRiskLevel(score);
+  // 높음(70점 이상)인 경우에만 경고 활성화
+  if (level.level === '높음' && d) {
+    banner.className = 'alert-banner show';
+    text.textContent = d.gu+' '+d.name+' '+info.name+' 위험도 '+score+'점 ('+level.level+') — 대피 경로 확인 필요';
     btnAlert.style.display = 'inline-flex';
   } else {
     banner.className = 'alert-banner';
@@ -1532,14 +1534,15 @@ function renderKPIs() {
   
   const scores = regions.map(d => calcRiskScore(d, currentRiskType));
   const avg = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
-  const high = scores.filter(s=>s>=50).length;
-  const veryHigh = scores.filter(s=>s>=70).length;
+  const high = scores.filter(s=>s>=70).length;       // 높음 (빨간색)
+  const normal = scores.filter(s=>s>=40).length;     // 보통 (주황색)
+  const low = scores.filter(s=>s>=20).length;        // 낮음 (노란색)
   const totalPop = regions.reduce((a,d)=>a+d.pop,0);
   const totalElder = regions.reduce((a,d)=>a+d.elder,0);
   const elderRate = Math.round(totalElder/totalPop*100*10)/10;
   const info = RISK_TYPE_INFO[currentRiskType] || RISK_TYPE_INFO.flood;
   const scopeLabel = selectedSigungu ? selectedSigungu : '전체';
-  document.getElementById('kpiGrid').innerHTML = '<div class="kpi-card"><div class="kpi-label">평균 위험도</div><div class="kpi-value '+(avg>=50?'warn':'')+' '+(avg>=70?'danger':'')+'">'+avg+'점</div><div class="kpi-trend">'+info.label+' ('+scopeLabel+' 평균)</div></div><div class="kpi-card"><div class="kpi-label">고위험 지역</div><div class="kpi-value '+(high>0?'warn':'')+'">'+high+'개동</div><div class="kpi-trend">위험도 50점 이상</div></div><div class="kpi-card"><div class="kpi-label">최고 위험 지역</div><div class="kpi-value '+(veryHigh>0?'danger':'')+'">'+veryHigh+'개동</div><div class="kpi-trend">위험도 70점 이상</div></div><div class="kpi-card"><div class="kpi-label">고령 인구 비율</div><div class="kpi-value">'+elderRate+'%</div><div class="kpi-trend">총 '+totalElder.toLocaleString()+'명 / '+totalPop.toLocaleString()+'명</div></div>';
+  document.getElementById('kpiGrid').innerHTML = '<div class="kpi-card"><div class="kpi-label">평균 위험도</div><div class="kpi-value '+(avg>=40?'warn':'')+' '+(avg>=70?'danger':'')+'">'+avg+'점</div><div class="kpi-trend">'+info.label+' ('+scopeLabel+' 평균)</div></div><div class="kpi-card"><div class="kpi-label">높음 지역</div><div class="kpi-value '+(high>0?'danger':'')+'">'+high+'개동</div><div class="kpi-trend">위험도 70점 이상 (빨간색)</div></div><div class="kpi-card"><div class="kpi-label">보통 지역</div><div class="kpi-value '+(normal>0?'warn':'')+'">'+normal+'개동</div><div class="kpi-trend">위험도 40점 이상 (주황색)</div></div><div class="kpi-card"><div class="kpi-label">고령 인구 비율</div><div class="kpi-value">'+elderRate+'%</div><div class="kpi-trend">총 '+totalElder.toLocaleString()+'명 / '+totalPop.toLocaleString()+'명</div></div>';
 }
 
 function renderWeather() {
@@ -1574,7 +1577,12 @@ function renderShelterList() {
 }
 
 function renderLegend() {
-  const items = [{color:'#FF4D4F', label:'매우 높음 (70~100)'},{color:'#FF7875', label:'높음 (50~69)'},{color:'#FFB800', label:'보통 (30~49)'},{color:'var(--primary)', label:'낮음 (0~29)'}];
+  const items = [
+    {color:'#EF4444', label:'높음 (70~100)'},      // 빨간색
+    {color:'#F97316', label:'보통 (40~69)'},       // 주황색
+    {color:'#EAB308', label:'낮음 (20~39)'},       // 노란색
+    {color:'#3B82F6', label:'매우 낮음 (0~19)'}    // 파란색
+  ];
   document.getElementById('legendContainer').innerHTML = items.map(i => '<div class="legend-item"><div class="legend-color" style="background:'+i.color+'"></div><span>'+i.label+'</span></div>').join('');
   document.getElementById('mapLegend').innerHTML = items.map(i => '<div class="legend-row"><div class="legend-box" style="background:'+i.color+'"></div><span>'+i.label+'</span></div>').join('');
 }
