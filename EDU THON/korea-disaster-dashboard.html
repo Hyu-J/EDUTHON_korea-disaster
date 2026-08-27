@@ -844,7 +844,7 @@ function addRiskPolygon(d) {
   poly.riskScore = score;
   poly.on('click', onDongClick);
   poly.on('mouseover', e => { e.target.setStyle({weight:3, fillOpacity:0.65}); showTooltip(e.target, d, score, level); });
-  poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.45}); e.target.closeTooltip(); map.closeTooltip(); });
+  poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.45}); e.target.closeTooltip(); });
   riskLayer.addLayer(poly);
   return poly;
 }
@@ -1202,6 +1202,293 @@ function updateDetailPanel() {
     return shelters;
   };
 
+  // 위험요인 HTML 생성 헬퍼
+  const buildRiskHtml = (factors) => {
+    return factors.map(f => 
+      '<div class="risk-factor"><span class="risk-factor-label">'+f.label+'</span><div class="risk-factor-bar"><div class="risk-factor-fill" style="width:'+Math.min((f.value/f.max)*100, 100)+'%;background:'+getColor(score)+'"></div></div><span class="risk-factor-value">'+Math.round(f.value)+'</span></div>'
+    ).join('');
+  };
+
+  // 위험요인 업데이트 (chart 아래의 riskFactorsChart만 업데이트)
+  const updateRiskFactors = (factors) => {
+    const html = buildRiskHtml(factors);
+    const el = document.getElementById('riskFactorsChart');
+    if (el) el.innerHTML = html;
+  };
+
+  // 선택 단계에 따른 표시
+  if (selectedEupmyeon && selectedRegion) {
+    // 3단계: 읍면동 선택됨 - 상세 정보 표시 (CSV 실데이터 기반)
+    const d = selectedRegion;
+    const csvMatch = findCsvData(d.name, selectedSigungu, 
+      SIDOS.find(s => s.code === selectedSido)?.name || '');
+    
+    detailTitle.innerHTML = '지역 상세 정보 <span id="detailRegion" style="font-weight:400;color:var(--muted)">'+(d.gu || selectedSigungu)+' '+d.name+'</span>';
+    
+    // 기본 정보
+    document.getElementById('dAdmin').textContent = csvMatch?.beopjeongdong || d.name;
+    document.getElementById('dGu').textContent = d.gu || selectedSigungu || '-';
+    
+    // 인구/가구
+    const pop = csvMatch?.pop || d.pop || 0;
+    const elder = csvMatch?.elder || d.elder || 0;
+    const elderRate = csvMatch?.elder_rate || d.elderRate || 0;
+    document.getElementById('dPop').textContent = pop.toLocaleString()+'명';
+    document.getElementById('dElder').textContent = elder.toLocaleString()+'명';
+    document.getElementById('dElderRate').textContent = elderRate + '%';
+    
+    // 면적/밀도
+    const area = csvMatch?.area_km2 || 0;
+    const density = area > 0 ? Math.round(pop / area) : 0;
+    document.getElementById('dLowland').textContent = area ? area + ' km\u00B2' : '-';
+    document.getElementById('dRiver').textContent = density ? density.toLocaleString() + ' 명/km\u00B2' : '-';
+    
+    // 재난 이력
+    const disasterDate = csvMatch?.recent_disaster_date || '-';
+    const disasterType = csvMatch?.disaster_type || '-';
+    const damageScale = csvMatch?.damage_scale || '-';
+    document.getElementById('dFloodCount').textContent = csvMatch?.damage_scale ? '\uBC1C\uC0DD' : '\uAE30\uB86D \uC5C6\uC74C';
+    document.getElementById('dMaxDepth').textContent = disasterType;
+    document.getElementById('dLastFlood').textContent = disasterDate;
+    
+    // 대피소 (extra 필드에서 파싱)
+    const shelters = csvMatch ? parseShelters(csvMatch.extra) : [];
+    const totalCap = shelters.reduce((sum, s) => sum + (s.cap || 0), 0);
+    document.getElementById('dShelter500').textContent = shelters.length + '\uAC1C';
+    document.getElementById('dShelter1k').textContent = shelters.length + '\uAC1C';
+    document.getElementById('dNearestDist').textContent = shelters.length ? '\uC778\uC81D' : '-';
+    document.getElementById('dShelterCap').textContent = totalCap.toLocaleString() + '\uBA85';
+    
+    // 위험요인 계산 (실데이터 기반)
+    const lowland = parseFloat(csvMatch?.area_km2) || 0;
+    const floodHistCount = csvMatch?.damage_scale ? 1 : 0;
+    
+    const riskFactors = {
+      flood: [
+        {label:'면적(대리:저지대)', value:Math.min(lowland*2, 40), max:40},
+        {label:'고령 비율', value:Math.min(elderRate*0.5, 20), max:20},
+        {label:'침수 이력', value:floodHistCount ? 25 : 5, max:25},
+        {label:'인구 밀도', value:Math.min(density/100, 20), max:20}
+      ],
+      heat: [
+        {label:'고령 비율', value:Math.min(elderRate*0.8, 35), max:35},
+        {label:'인구 밀도', value:Math.min(density/200, 30), max:30},
+        {label:'면적(대리:열섬)', value:Math.min(lowland*1.5, 25), max:25},
+        {label:'취약시설', value:shelters.length ? 10 : 5, max:15}
+      ],
+      landslide: [
+        {label:'경사/면적', value:Math.min(lowland*0.8, 25), max:25},
+        {label:'고령 비율', value:Math.min(elderRate*0.4, 15), max:15},
+        {label:'인구 밀도', value:Math.min(density/150, 15), max:15},
+        {label:'침수 이력', value:floodHistCount ? 15 : 5, max:20}
+      ],
+      typhoon: [
+        {label:'면적(대리:저지)', value:Math.min(lowland*1.2, 30), max:30},
+        {label:'고령 비율', value:Math.min(elderRate*0.5, 15), max:15},
+        {label:'침수 이력', value:floodHistCount ? 20 : 5, max:25},
+        {label:'인구 밀도', value:Math.min(density/100, 15), max:15}
+      ],
+      wildfire: [
+        {label:'산림/건조도', value:Math.min((100-lowland*0.5)*0.4, 30), max:30},
+        {label:'고령 비율', value:Math.min(elderRate*0.5, 20), max:20},
+        {label:'인구 밀도', value:Math.min(density/150, 15), max:15},
+        {label:'하천 거리', value:10, max:25}
+      ]
+    };
+    const factors = riskFactors[currentRiskType] || riskFactors.flood;
+    updateRiskFactors(factors);
+
+    // 대피소 상세 (routeInfo)
+    routeInfo.style.display = shelters.length ? 'flex' : 'none';
+    if (shelters.length) {
+      const nearest = shelters.reduce((min, s) => (s.cap || 0) > (min.cap || 0) ? s : min, shelters[0]);
+      routeInfo.innerHTML = 
+        '<div class="route-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg><strong>\uB300\uD45C \uB300\uD53C\uC18C:</strong> '+nearest.name+'</div>'+
+        '<div class="route-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg><strong>\uBA85\uB355:</strong> '+(nearest.area||0)+'\u33A1</div>'+
+        '<div class="route-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><strong>\uC218\uC694 \uC778\uC6F0:</strong> '+(nearest.cap||0).toLocaleString()+'\uBA85</div>'+
+        '<div class="route-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><strong>\uC804\uCCB4 \uB300\uD53C\uC18C:</strong> '+shelters.length+'\uAC1C\uC18C</div>';
+    }
+     
+  } else if (selectedSigungu) {
+    // 2단계: 시군구 선택됨 - 시군구 요약 (CSV 데이터 집계)
+    const sidoName = SIDOS.find(s => s.code === selectedSido)?.name || '';
+    const sigunguData = csvData.filter(d => 
+      d.sigungu === selectedSigungu && 
+      d.sido === sidoName &&
+      d.adm_cd && 
+      !d.adm_cd.toString().endsWith('000000') &&
+      !d.eupmyeondong.includes('전체')
+    );
+    
+    if (sigunguData.length > 0) {
+      const totalPop = sigunguData.reduce((sum, d) => sum + (parseInt(d.pop) || 0), 0);
+      const totalElder = sigunguData.reduce((sum, d) => sum + (parseInt(d.elder) || 0), 0);
+      const elderRate = totalPop > 0 ? (totalElder / totalPop * 100).toFixed(1) : 0;
+      const totalArea = sigunguData.reduce((sum, d) => sum + (parseFloat(d.area_km2) || 0), 0);
+      const density = totalArea > 0 ? Math.round(totalPop / totalArea) : 0;
+      const totalShelters = sigunguData.reduce((sum, d) => sum + (parseShelters(d.extra)?.length || 0), 0);
+      const totalCap = sigunguData.reduce((sum, d) => sum + parseShelters(d.extra).reduce((s, x) => s + (x.cap || 0), 0), 0);
+      
+      detailTitle.innerHTML = '\uC2DC\uB514\uAD6D \uC704\uD5D8\uB3C4 \uBD84\uC11D <span id="detailRegion" style="font-weight:400;color:var(--muted)">'+selectedSigungu+' \uC804\uCCB4 ('+sigunguData.length+'\uAC1C \uC74D\uBA7C\uB3D9)</span>';
+      document.getElementById('dAdmin').textContent = selectedSigungu;
+      document.getElementById('dGu').textContent = sidoName;
+      document.getElementById('dPop').textContent = totalPop.toLocaleString()+'\uBA85';
+      document.getElementById('dElder').textContent = totalElder.toLocaleString()+'\uBA85';
+      document.getElementById('dElderRate').textContent = elderRate+'%';
+      document.getElementById('dLowland').textContent = totalArea.toFixed(2)+' km\u00B2';
+      document.getElementById('dRiver').textContent = density ? density.toLocaleString()+' \uBA85/km\u00B2' : '-';
+      document.getElementById('dFloodCount').textContent = sigunguData.length+'\uAC1C \uC74D\uBA7C\uB3D9';
+      document.getElementById('dMaxDepth').textContent = '-';
+      document.getElementById('dLastFlood').textContent = '-';
+      document.getElementById('dShelter500').textContent = totalShelters+'\uAC1C';
+      document.getElementById('dShelter1k').textContent = totalShelters+'\uAC1C';
+      document.getElementById('dNearestDist').textContent = '\uC74D\uBA7C\uB3D9\uBCF4\uB2E4 \uC0C1\uC774';
+      document.getElementById('dShelterCap').textContent = totalCap.toLocaleString()+'\uBA85';
+      
+      // 위험요인 (시군구 평균)
+      const factors = {
+        flood: [
+          {label:'\uD3EC\uC801 \uBA85\uC801(\uC800\uC9C0\uB300)', value:Math.min((totalArea/sigunguData.length)*2, 40), max:40},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.5, 20), max:20},
+          {label:'\uC74D\uBA7C\uB3D9 \uC218(\uB040\uB3C4)', value:Math.min(sigunguData.length*1.5, 25), max:25},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/100, 20), max:20}
+        ],
+        heat: [
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.8, 35), max:35},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/200, 30), max:30},
+          {label:'\uBA85\uC801(\uC5F4\uC11C)', value:Math.min((totalArea/sigunguData.length)*1.5, 25), max:25},
+          {label:'\uB300\uD53C\uC18C \uC218', value:Math.min(totalShelters*0.5, 15), max:15}
+        ],
+        landslide: [
+          {label:'\uD3EC\uC801 \uBA85\uC801(\uACBD\uC0AC)', value:Math.min((totalArea/sigunguData.length)*0.8, 25), max:25},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.4, 15), max:15},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/150, 15), max:15},
+          {label:'\uC74D\uBA7C\uB3D9 \uC218', value:Math.min(sigunguData.length, 15), max:15}
+        ],
+        typhoon: [
+          {label:'\uD3EC\uC801 \uBA85\uC801', value:Math.min((totalArea/sigunguData.length)*1.2, 30), max:30},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.5, 15), max:15},
+          {label:'\uC74D\uBA7C\uB3D9 \uC218', value:Math.min(sigunguData.length*1.2, 25), max:25},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/100, 15), max:15}
+        ],
+        wildfire: [
+          {label:'\uC0B0\uB9BC/\uACFC\uC870\uB3C4', value:Math.min((100-(totalArea/sigunguData.length)*0.5)*0.4, 30), max:30},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.5, 20), max:20},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/150, 15), max:15},
+          {label:'\uB300\uD53C\uC18C', value:Math.min(totalShelters*0.3, 15), max:15}
+        ]
+      };
+      const f = factors[currentRiskType] || factors.flood;
+      updateRiskFactors(f);
+      
+      routeInfo.style.display = 'none';
+    } else {
+      detailTitle.innerHTML = '\uC9C0\uC5ED \uC0C1\uC138 \uC815\uBCF4 <span id="detailRegion" style="font-weight:400;color:var(--muted)">'+selectedSigungu+'</span>';
+      routeInfo.style.display = 'none';
+    }
+     
+  } else if (selectedSido) {
+    // 1단계: 시도 선택됨 - 시도 수준 정보 (CSV 데이터 집계)
+    const sidoName = SIDOS.find(s => s.code === selectedSido)?.name || '';
+    const sidoData = csvData.filter(d => 
+      d.sido === sidoName &&
+      d.adm_cd && 
+      !d.adm_cd.toString().endsWith('000000') &&
+      !d.eupmyeondong.includes('전체')
+    );
+    
+    if (sidoData.length > 0) {
+      const totalPop = sidoData.reduce((sum, d) => sum + (parseInt(d.pop) || 0), 0);
+      const totalElder = sidoData.reduce((sum, d) => sum + (parseInt(d.elder) || 0), 0);
+      const elderRate = totalPop > 0 ? (totalElder / totalPop * 100).toFixed(1) : 0;
+      const totalArea = sidoData.reduce((sum, d) => sum + (parseFloat(d.area_km2) || 0), 0);
+      const density = totalArea > 0 ? Math.round(totalPop / totalArea) : 0;
+      const totalShelters = sidoData.reduce((sum, d) => sum + (parseShelters(d.extra)?.length || 0), 0);
+      const totalCap = sidoData.reduce((sum, d) => sum + parseShelters(d.extra).reduce((s, x) => s + (x.cap || 0), 0), 0);
+      
+      detailTitle.innerHTML = '\uC2DC\uB3C4 \uC704\uD5D8\uB3C4 \uBD84\uC11D <span id="detailRegion" style="font-weight:400;color:var(--muted)">'+sidoName+' \uC804\uCCB4 ('+sidoData.length+'\uAC1C \uC74D\uBA7C\uB3D9)</span>';
+      document.getElementById('dAdmin').textContent = sidoName;
+      document.getElementById('dGu').textContent = sidoName;
+      document.getElementById('dPop').textContent = totalPop.toLocaleString()+'\uBA85';
+      document.getElementById('dElder').textContent = totalElder.toLocaleString()+'\uBA85';
+      document.getElementById('dElderRate').textContent = elderRate+'%';
+      document.getElementById('dLowland').textContent = totalArea.toFixed(2)+' km\u00B2';
+      document.getElementById('dRiver').textContent = density ? density.toLocaleString()+' \uBA85/km\u00B2' : '-';
+      document.getElementById('dFloodCount').textContent = sidoData.length+'\uAC1C \uC74D\uBA7C\uB3D9';
+      document.getElementById('dMaxDepth').textContent = '-';
+      document.getElementById('dLastFlood').textContent = '-';
+      document.getElementById('dShelter500').textContent = totalShelters+'\uAC1C';
+      document.getElementById('dShelter1k').textContent = totalShelters+'\uAC1C';
+      document.getElementById('dNearestDist').textContent = '\uC74D\uBA7C\uB3D9\uBCF4\uB2E4 \uC0C1\uC774';
+      document.getElementById('dShelterCap').textContent = totalCap.toLocaleString()+'\uBA85';
+      
+      // 위험요인 (시도 평균)
+      const factors = {
+        flood: [
+          {label:'\uD3EC\uC801 \uBA85\uC801(\uC800\uC9C0\uB300)', value:Math.min((totalArea/sidoData.length)*2, 40), max:40},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.5, 20), max:20},
+          {label:'\uC74D\uBA7C\uB3D9 \uC218', value:Math.min(sidoData.length*1.2, 25), max:25},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/100, 20), max:20}
+        ],
+        heat: [
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.8, 35), max:35},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/200, 30), max:30},
+          {label:'\uD3EC\uC801 \uBA85\uC801(\uC5F4\uC11C)', value:Math.min((totalArea/sidoData.length)*1.5, 25), max:25},
+          {label:'\uB300\uD53C\uC18C \uC218', value:Math.min(totalShelters*0.3, 15), max:15}
+        ],
+        landslide: [
+          {label:'\uD3EC\uC801 \uBA85\uC801(\uACBD\uC0AC)', value:Math.min((totalArea/sidoData.length)*0.8, 25), max:25},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.4, 15), max:15},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/150, 15), max:15},
+          {label:'\uC74D\uBA7C\uB3D9 \uC218', value:Math.min(sidoData.length*0.8, 15), max:15}
+        ],
+        typhoon: [
+          {label:'\uD3EC\uC801 \uBA85\uC801', value:Math.min((totalArea/sidoData.length)*1.2, 30), max:30},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.5, 15), max:15},
+          {label:'\uC74D\uBA7C\uB3D9 \uC218', value:Math.min(sidoData.length, 25), max:25},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/100, 15), max:15}
+        ],
+        wildfire: [
+          {label:'\uC0B0\uB9BC/\uACFC\uC870\uB3C4', value:Math.min((100-(totalArea/sidoData.length)*0.5)*0.4, 30), max:30},
+          {label:'\uACE0\uB824 \uBE44\uC728', value:Math.min(parseFloat(elderRate)*0.5, 20), max:20},
+          {label:'\uC778\uAD6C \uBC00\uB3C4', value:Math.min(density/150, 15), max:15},
+          {label:'\uB300\uD53C\uC18C', value:Math.min(totalShelters*0.3, 15), max:15}
+        ]
+      };
+      const f = factors[currentRiskType] || factors.flood;
+      updateRiskFactors(f);
+      
+      routeInfo.style.display = 'none';
+    } else {
+      detailTitle.innerHTML = '\uC9C0\uC5ED \uC0C1\uC138 \uC815\uBCF4 <span id="detailRegion" style="font-weight:400;color:var(--muted)">'+sidoName+'</span>';
+      routeInfo.style.display = 'none';
+    }
+
+  } else {
+    // 미선택 상태
+    detailTitle.innerHTML = '\uC9C0\uC5ED \uC0C1\uC138 \uC815\uBCF4 <span id="detailRegion" style="font-weight:400;color:var(--muted)">\uC9C0\uC5ED\uC744 \uC120\uD0DD\uD558\uC138\uC694</span>';
+    document.getElementById('dAdmin').textContent = '-';
+    document.getElementById('dGu').textContent = '-';
+    document.getElementById('dPop').textContent = '-';
+    document.getElementById('dElder').textContent = '-';
+    document.getElementById('dElderRate').textContent = '-';
+    document.getElementById('dLowland').textContent = '-';
+    document.getElementById('dRiver').textContent = '-';
+    document.getElementById('dFloodCount').textContent = '-';
+    document.getElementById('dMaxDepth').textContent = '-';
+    document.getElementById('dLastFlood').textContent = '-';
+    document.getElementById('dShelter500').textContent = '-';
+    document.getElementById('dShelter1k').textContent = '-';
+    document.getElementById('dNearestDist').textContent = '-';
+    document.getElementById('dShelterCap').textContent = '-';
+    updateRiskFactors([]);
+    routeInfo.style.display = 'none';
+  }
+}
+    });
+    return shelters;
+  };
+
   // 선택 단계에 따른 표시
   if (selectedEupmyeon && selectedRegion) {
     // 3단계: 읍면동 선택됨 - 상세 정보 표시 (CSV 실데이터 기반)
@@ -1286,7 +1573,7 @@ function updateDetailPanel() {
     const riskHtml = factors.map(f => 
       '<div class="risk-factor"><span class="risk-factor-label">'+f.label+'</span><div class="risk-factor-bar"><div class="risk-factor-fill" style="width:'+Math.min((f.value/f.max)*100, 100)+'%;background:'+getColor(score)+'"></div></div><span class="risk-factor-value">'+Math.round(f.value)+'</span></div>'
     ).join('');
-    document.getElementById('riskFactors').innerHTML = riskHtml;
+    document.getElementById('riskFactorsChart').innerHTML = riskHtml;
     document.getElementById('riskFactorsChart').innerHTML = riskHtml;
     document.getElementById('riskFactorsChart').innerHTML = riskHtml;
 
@@ -1450,7 +1737,7 @@ function updateDetailPanel() {
         ]
       };
       const f = factors[currentRiskType] || factors.flood;
-      document.getElementById('riskFactors').innerHTML = f.map(f => 
+      document.getElementById('riskFactorsChart').innerHTML = f.map(f => 
         '<div class="risk-factor"><span class="risk-factor-label">'+f.label+'</span><div class="risk-factor-bar"><div class="risk-factor-fill" style="width:'+Math.min((f.value/f.max)*100, 100)+'%;background:'+getColor(score)+'"></div></div><span class="risk-factor-value">'+Math.round(f.value)+'</span></div>'
       ).join('');
       
@@ -1477,7 +1764,7 @@ function updateDetailPanel() {
     document.getElementById('dShelter1k').textContent = '-';
     document.getElementById('dNearestDist').textContent = '-';
     document.getElementById('dShelterCap').textContent = '-';
-    document.getElementById('riskFactors').innerHTML = '';
+    document.getElementById('riskFactorsChart').innerHTML = '';
     routeInfo.style.display = 'none';
   }
 }
