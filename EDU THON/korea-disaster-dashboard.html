@@ -550,7 +550,7 @@ async function loadEupmyeonData() {
 }
 
 function initMap() {
-  map = L.map('map', {zoomControl:false}).setView(KOREA_CENTER, 11.5);
+  map = L.map('map', {zoomControl:false}).setView(KOREA_CENTER, 7.5);
   L.control.zoom({position:'bottomright'}).addTo(map);
 
   // OpenStreetMap 표준 타일 (API 키 불필요)
@@ -597,9 +597,18 @@ function renderRiskPolygons() {
 function renderDefaultPolygons() {
   // 기본: 전국 시군구 데이터 표시 (전체 한국이 보이도록)
   const regions = NATIONWIDE_MOCK_DATA;
+  const boundsList = [];
   regions.forEach(d => {
-    addRiskPolygon(d);
+    const poly = addRiskPolygon(d);
+    if (poly) boundsList.push(poly.getBounds());
   });
+  
+  // 한국 전체가 딱 맞게 보이도록 fitBounds
+  if (boundsList.length > 0) {
+    const group = new L.featureGroup();
+    boundsList.forEach(b => group.addLayer(L.rectangle(b)));
+    map.fitBounds(group.getBounds(), {padding: [20, 20], maxZoom: 10});
+  }
 }
 
 function renderSidoPolygons() {
@@ -694,6 +703,7 @@ function addRiskPolygon(d) {
   poly.on('mouseover', e => { e.target.setStyle({weight:3, fillOpacity:0.65}); showTooltip(e.target, d, score, level); });
   poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.45}); map.closeTooltip(); });
   riskLayer.addLayer(poly);
+  return poly;
 }
 
 function getMockBounds(center) {
