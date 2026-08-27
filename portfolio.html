@@ -467,6 +467,9 @@
     </footer>
   </main>
 
+  <!-- 챗봇 설정 (API 키 별도 파일, Git 무시) -->
+  <script src="chatbot-config.js"></script>
+
   <!-- 챗봇 버튼 -->
   <button class="chatbot-toggle" id="chatbotToggle" aria-label="상담 열기" aria-expanded="false" aria-controls="chatbotWindow">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
@@ -579,15 +582,122 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
-      function sendMessage() {
+function sendMessage() {
         const text = inputEl.value.trim();
         if (!text) return;
         addMessage(text, true);
         inputEl.value = '';
-        // 고정 답변
-        setTimeout(() => {
-          addMessage('준비 중입니다', false);
-        }, 500);
+        setInputDisabled(true);
+        showTypingIndicator();
+
+        // 대화 히스토리 구성
+        const messages = buildMessageHistory(text);
+
+        // API 호출
+        callChatAPI(messages)
+          .then(reply => {
+            hideTypingIndicator();
+            addMessage(reply, false);
+          })
+          .catch(err => {
+            hideTypingIndicator();
+            addMessage('죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', false);
+            console.error('챗봇 오류:', err);
+          })
+          .finally(() => {
+            setInputDisabled(false);
+          });
+      }
+
+      function buildMessageHistory(newUserMessage) {
+        const history = [];
+        // 시스템 프롬프트
+        if (window.CHATBOT_CONFIG?.systemPrompt) {
+          history.push({ role: 'system', content: window.CHATBOT_CONFIG.systemPrompt });
+        }
+        // 기존 대화 내역 (최근 10턴만)
+        const bubbles = messagesEl.querySelectorAll('.chatbot-bubble');
+        const userMessages = [];
+        const botMessages = [];
+        bubbles.forEach(b => {
+          const isUser = b.closest('.chatbot-message').classList.contains('user');
+          if (isUser) userMessages.push(b.textContent);
+          else botMessages.push(b.textContent);
+        });
+        // 번갈아 가며 추가 (최근 10쌍)
+        const maxPairs = 10;
+        for (let i = 0; i < Math.min(userMessages.length, botMessages.length, maxPairs); i++) {
+          history.push({ role: 'user', content: userMessages[i] });
+          history.push({ role: 'assistant', content: botMessages[i] });
+        }
+        // 현재 메시지
+        history.push({ role: 'user', content: newUserMessage });
+        return history;
+      }
+
+      function callChatAPI(messages) {
+        const config = window.CHATBOT_CONFIG || {};
+        const apiKey = config.apiKey;
+        const baseUrl = config.baseUrl || 'https://mlapi.run/286e9158-d32e-436d-a23d-36b43fc8e68a/v1';
+        const model = config.model || 'gpt-5.6-luna';
+
+        if (!apiKey || apiKey === 'YOUR_API_KEY_HERE') {
+          return Promise.reject(new Error('API 키가 설정되지 않았습니다. chatbot-config.js 파일을 확인하세요.'));
+        }
+
+        return fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: messages,
+            stream: false,
+            temperature: 0.7,
+            max_tokens: 1000
+          })
+        })
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(text => {
+                throw new Error('API 오류 (' + res.status + '): ' + text);
+              });
+            }
+            return res.json();
+          })
+          .then(data => {
+            const content = data.choices?.[0]?.message?.content;
+            if (!content) throw new Error('응답 형식이 올바르지 않습니다.');
+            return content.trim();
+          });
+      }
+
+      function showTypingIndicator() {
+        if (emptyEl) emptyEl.remove();
+        const indicator = document.createElement('div');
+        indicator.className = 'chatbot-message bot chatbot-typing';
+        indicator.id = 'typingIndicator';
+        indicator.innerHTML = '<div class="chatbot-avatar">봇</div><div class="chatbot-bubble"><span class="typing-dots"><span></span><span></span><span></span></span></div>';
+        messagesEl.appendChild(indicator);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function hideTypingIndicator() {
+        const indicator = document.getElementById('typingIndicator');
+        if (indicator) indicator.remove();
+      }
+
+      function setInputDisabled(disabled) {
+        inputEl.disabled = disabled;
+        sendBtn.disabled = disabled;
+        if (disabled) {
+          inputEl.placeholder = '답변 기다리는 중...';
+        } else {
+          inputEl.placeholder = '메시지를 입력하세요...';
+          inputEl.focus();
+        }
       }
 
       toggleBtn.addEventListener('click', toggleChatbot);
