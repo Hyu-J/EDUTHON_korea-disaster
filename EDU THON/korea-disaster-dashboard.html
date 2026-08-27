@@ -214,7 +214,24 @@ a:hover{text-decoration:underline}
       <button class="risk-tab" role="tab" data-risk="typhoon" aria-selected="false">태풍 위험</button>
       <button class="risk-tab" role="tab" data-risk="wildfire" aria-selected="false">산불 위험</button>
     </div>
-    <div class="kpi-grid" id="kpiGrid"></div>
+
+    <!-- 네이버지도 길찾기 - 대피소 -->
+    <div class="panel">
+      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> 대피소 길찾기 (네이버지도)</div>
+      <div id="naverRouteContainer" style="display:flex;flex-direction:column;gap:8px">
+        <div class="dropdown-wrapper">
+          <label for="naverShelterSelect" class="dropdown-label">대피소 선택</label>
+          <select id="naverShelterSelect" class="dropdown-select" disabled>
+            <option value="">먼저 지역을 선택하세요</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btnOpenNaverRoute" style="width:100%" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> 네이버지도에서 길찾기 열기
+        </button>
+        <div style="font-size:11px;color:var(--muted);text-align:center">선택한 대피소까지 도보/자동차 경로 안내</div>
+      </div>
+    </div>
+    
     <div class="panel">
       <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> 가까운 대피시설 (반경 1.5km)</div>
       <div class="shelter-list" id="shelterList" role="listbox" aria-label="대피시설 목록"></div>
@@ -227,6 +244,14 @@ a:hover{text-decoration:underline}
       <div class="panel-title">위험도 범례</div>
       <div class="legend" id="legendContainer"></div>
     </div>
+    
+    <!-- Windy.com 임베드 -->
+    <div class="panel">
+      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"/></svg> 실시간 풍향/풍속 (Windy)</div>
+      <div id="windyContainer" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:var(--bg)"></div>
+      <div style="margin-top:8px;font-size:11px;color:var(--muted);text-align:center">풍향·풍속·강수 레이더 실시간 확인</div>
+    </div>
+
   </aside>
   <main class="main">
     <header class="header">
@@ -552,6 +577,8 @@ async function init() {
   renderShelterList();
   initChart();
   bindEvents();
+  initWindy(); // Windy.com 임베드 초기화
+  initWindy();
   hideLoading();
 }
 
@@ -594,6 +621,68 @@ async function loadEupmyeonData() {
       showToast('읍면동 데이터 로드 실패: ' + e.message, 'error', 8000);
     }
   }
+}
+
+
+
+// ===== Windy.com 초기화 =====
+function initWindy() {
+  const container = document.getElementById('windyContainer');
+  if (!container) return;
+  const WINDY_KEY = 'Pj3Oh1wzqg7koMZWxBDQuQrb7hGuBAYP';
+  if (typeof windyInit === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://api.windy.com/assets/map-forecast/libBoot.js';
+    script.onload = () => initWindyMap();
+    script.onerror = () => { container.innerHTML = '<div style=display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:13px>Windy API 로드 실패</div>'; };
+    document.head.appendChild(script);
+  } else { initWindyMap(); }
+  function initWindyMap() {
+    try {
+      let lat = 36.5, lng = 127.5, zoom = 7;
+      if (selectedRegion && selectedRegion.center) { lat = selectedRegion.center[0]; lng = selectedRegion.center[1]; zoom = 10; }
+      else if (selectedSigungu) { const sido = SIDOS.find(s => s.code === selectedSido); if (sido) { lat = sido.center[0]; lng = sido.center[1]; zoom = 9; } }
+      const options = { key: WINDY_KEY, verbose: true, lat, lng, zoom };
+      windyInit(options, windyAPI => { const { map, store } = windyAPI; store.set('overlay', 'wind'); if (selectedRegion && selectedRegion.center) { L.marker(selectedRegion.center).addTo(map).bindPopup('<b>' + (selectedRegion.gu || '') + ' ' + selectedRegion.name + '</b><br>실시간 풍향/풍속 확인').openPopup(); } window.windyAPI = windyAPI; console.log('Windy initialized'); });
+    } catch (e) { console.warn('Windy init failed:', e); container.innerHTML = '<div style=display:flex;align-items:center;justify-content:center;height:100%;color:var(--danger);font-size:13px>Windy 초기화 실패</div>'; }
+  }
+}
+
+// ===== 네이버지도 대피소 드롭다운 업데이트 =====
+function updateNaverShelterSelect(shelters) {
+  const select = document.getElementById('naverShelterSelect');
+  const btn = document.getElementById('btnOpenNaverRoute');
+  if (!select) return;
+  if (!shelters || shelters.length === 0) { select.innerHTML = '<option value=>대피소 정보 없음</option>'; select.disabled = true; if (btn) btn.disabled = true; return; }
+  select.innerHTML = '<option value=>대피소 선택</option>' + shelters.map((s, i) => '<option value=' + i + '>' + s.name + ' (' + (s.dist || '알 수 없음') + 'm, ' + (s.cap || 0).toLocaleString() + '명)</option>').join('');
+  select.disabled = false; if (btn) btn.disabled = false;
+  select.onchange = () => { if (btn) btn.disabled = select.value === ''; };
+}
+
+// ===== 네이버지도 길찾기 열기 =====
+function openNaverMapRoute() {
+  const select = document.getElementById('naverShelterSelect');
+  if (!select || select.value === '') { showToast('대피소를 먼저 선택해주세요', 'warning'); return; }
+  const shelters = getCurrentShelters();
+  const shelter = shelters[parseInt(select.value)]; if (!shelter) return;
+  let startName = '현재 위치';
+  if (selectedRegion && selectedRegion.center) { startName = (selectedRegion.gu || '') + ' ' + selectedRegion.name; }
+  const goalName = shelter.name;
+  const naverUrl = 'https://map.naver.com/p/directions/' + encodeURIComponent(startName) + '/' + encodeURIComponent(goalName) + '/WALK';
+  window.open(naverUrl, '_blank');
+  showToast('네이버지도에서 길찾기를 엽니다: ' + goalName, 'success');
+}
+
+function getCurrentShelters() {
+  if (selectedRegion && selectedRegion.shelters) return selectedRegion.shelters;
+  return [{name: '주민센터', lat: 37.5665, lng: 126.9780}];
+}
+
+function bindNaverRouteEvent() {
+  const btn = document.getElementById('btnOpenNaverRoute');
+  if (btn) btn.addEventListener('click', openNaverMapRoute);
+  const select = document.getElementById('naverShelterSelect');
+  if (select) select.addEventListener('change', () => { const b = document.getElementById('btnOpenNaverRoute'); if (b) b.disabled = select.value === ''; });
 }
 
 // 토스트 알림 함수
@@ -1161,6 +1250,7 @@ function selectRegion(d) {
     if (l.dongData?.id === d.id) { l.setStyle({weight:4, color:'#fff', fillOpacity:0.7}); map.flyTo(d.center, 14, {duration: 1.2}); }
     else { l.setStyle({weight:1, color:getColor(l.riskScore), fillOpacity:0.45}); }
   });
+  updateShelterList(d);
   updateDetailPanel();
   updateChart();
   updateAlertBanner();
@@ -1259,6 +1349,10 @@ function updateDetailPanel() {
     document.getElementById('dNearestDist').textContent = shelters.length ? '\uC778\uC81D' : '-';
     document.getElementById('dShelterCap').textContent = totalCap.toLocaleString() + '\uBA85';
     
+    if (shelters.length > 0) {
+      updateNaverShelterSelect(shelters);
+    }
+
     // 위험요인 계산 (실데이터 기반)
     const lowland = parseFloat(csvMatch?.area_km2) || 0;
     const floodHistCount = csvMatch?.damage_scale ? 1 : 0;
@@ -1297,6 +1391,7 @@ function updateDetailPanel() {
     };
     const factors = riskFactors[currentRiskType] || riskFactors.flood;
     updateRiskFactors(factors);
+    
 
     // 대피소 상세 (routeInfo)
     routeInfo.style.display = shelters.length ? 'flex' : 'none';
@@ -1531,24 +1626,8 @@ function updateAlertBanner() {
 }
 
 function renderKPIs() {
-  // Filter regions based on selection
-  let regions = ADMIN_DONGS;
-  if (selectedSigungu) {
-    regions = ADMIN_DONGS.filter(d => d.gu === selectedSigungu);
-  }
-  if (regions.length === 0) regions = ADMIN_DONGS;
-  
-  const scores = regions.map(d => calcRiskScore(d, currentRiskType));
-  const avg = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
-  const high = scores.filter(s=>s>=70).length;       // 높음 (빨간색)
-  const normal = scores.filter(s=>s>=40).length;     // 보통 (주황색)
-  const low = scores.filter(s=>s>=20).length;        // 낮음 (노란색)
-  const totalPop = regions.reduce((a,d)=>a+d.pop,0);
-  const totalElder = regions.reduce((a,d)=>a+d.elder,0);
-  const elderRate = Math.round(totalElder/totalPop*100*10)/10;
-  const info = RISK_TYPE_INFO[currentRiskType] || RISK_TYPE_INFO.flood;
-  const scopeLabel = selectedSigungu ? selectedSigungu : '전체';
-  document.getElementById('kpiGrid').innerHTML = '<div class="kpi-card"><div class="kpi-label">평균 위험도</div><div class="kpi-value '+(avg>=40?'warn':'')+' '+(avg>=70?'danger':'')+'">'+avg+'점</div><div class="kpi-trend">'+info.label+' ('+scopeLabel+' 평균)</div></div><div class="kpi-card"><div class="kpi-label">높음 지역</div><div class="kpi-value '+(high>0?'danger':'')+'">'+high+'개동</div><div class="kpi-trend">위험도 70점 이상 (빨간색)</div></div><div class="kpi-card"><div class="kpi-label">보통 지역</div><div class="kpi-value '+(normal>0?'warn':'')+'">'+normal+'개동</div><div class="kpi-trend">위험도 40점 이상 (주황색)</div></div><div class="kpi-card"><div class="kpi-label">고령 인구 비율</div><div class="kpi-value">'+elderRate+'%</div><div class="kpi-trend">총 '+totalElder.toLocaleString()+'명 / '+totalPop.toLocaleString()+'명</div></div>';
+  // KPI 패널은 현재 사용하지 않으므로 아무 것도 하지 않음
+  return;
 }
 
 function renderWeather() {
@@ -1985,6 +2064,7 @@ function bindEvents() {
   document.getElementById('btnLegendToggle').addEventListener('click', () => { const l = document.getElementById('mapLegend'); l.style.display = l.style.display === 'none' ? 'flex' : 'none'; });
   document.getElementById('btnFullscreen').addEventListener('click', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
   document.getElementById('btnAlert').addEventListener('click', () => { if (selectedRegion) { alert('대피 알림: '+selectedRegion.gu+' '+selectedRegion.name+' 지역 위험도 높음. 가까운 대피소로 이동하세요.'); } });
+  bindNaverRouteEvent(); // 네이버지도 이벤트 바인딩
 }
 </script>
 </body>
