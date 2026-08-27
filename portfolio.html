@@ -541,7 +541,6 @@
         toggleBtn.setAttribute('aria-expanded', 'true');
         toggleBtn.setAttribute('aria-label', '상담 닫기');
         inputEl.focus();
-        document.body.style.overflow = 'hidden';
       }
 
       function closeChatbot() {
@@ -549,7 +548,6 @@
         windowEl.classList.remove('is-open');
         toggleBtn.setAttribute('aria-expanded', 'false');
         toggleBtn.setAttribute('aria-label', '상담 열기');
-        document.body.style.overflow = '';
         setTimeout(() => {
           if (!isOpen) windowEl.hidden = true;
         }, 200);
