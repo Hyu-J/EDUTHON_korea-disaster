@@ -838,13 +838,13 @@ function addRiskPolygon(d) {
   const level = getRiskLevel(score);
   const bounds = getMockBounds(d.center);
   const poly = L.rectangle(bounds, {
-    color: level.color, weight: 1, fillColor: level.color, fillOpacity: 0.45, interactive: true
+    color: level.color, weight: 1, fillColor: level.color, fillOpacity: 0.3, interactive: true
   });
   poly.dongData = d;
   poly.riskScore = score;
   poly.on('click', onDongClick);
-  poly.on('mouseover', e => { e.target.setStyle({weight:3, fillOpacity:0.65}); showTooltip(e.target, d, score, level); });
-  poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.45}); e.target.closeTooltip(); });
+  poly.on('mouseover', e => { e.target.setStyle({weight:3, fillOpacity:0.5}); showTooltip(e.target, d, score, level); });
+  poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.3}); e.target.closeTooltip(); });
   riskLayer.addLayer(poly);
   return poly;
 }
