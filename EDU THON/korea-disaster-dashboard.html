@@ -150,6 +150,28 @@ a:hover{text-decoration:underline}
   .bottom-grid{grid-template-columns:1fr}
   .kpi-grid{grid-template-columns:1fr 1fr}
 }
+
+/* Toast 알림 스타일 */
+.toast {
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translateX(100%);
+  transition: all 0.3s ease;
+  pointer-events: auto;
+  max-width: 400px;
+  word-wrap: break-word;
+}
+.toast.show { opacity: 1; transform: translateX(0); }
+.toast-success { background: var(--success); color: #fff; }
+.toast-error { background: var(--danger); color: #fff; }
+.toast-info { background: var(--primary); color: #fff; }
+.toast-warning { background: var(--warning); color: #fff; }
+.toast code { background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 11px; }
+
 </style>
 </head>
 <body>
@@ -539,14 +561,131 @@ function hideLoading() {
 
 async function loadEupmyeonData() {
   try {
-    const resp = await fetch('korea-eupmyeon-names.json');
-    if (!resp.ok) throw new Error('Failed to load');
-    window.EUPMYEON_DATA = await resp.json();
+    // Load the clean CSV data (properly encoded UTF-8)
+    const resp = await fetch('eupmyeon_data_for_js.csv');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: Failed to load CSV`);
+    const csvText = await resp.text();
+    window.EUPMYEON_DATA = parseCSV(csvText);
     console.log('Eupmyeon data loaded:', window.EUPMYEON_DATA.length, 'records');
+    if (window.EUPMYEON_DATA.length > 0) {
+      console.log('Sample record:', window.EUPMYEON_DATA[0]);
+      console.log('Unique sigungu:', [...new Set(window.EUPMYEON_DATA.map(d => d.sigungu))]);
+      console.log('Unique sido:', [...new Set(window.EUPMYEON_DATA.map(d => d.sido))]);
+      showToast('읍면동 데이터 로드 완료 (' + window.EUPMYEON_DATA.length + '개)', 'success');
+    }
   } catch (e) {
     console.warn('Eupmyeon data load failed, using empty array:', e);
     window.EUPMYEON_DATA = [];
+    
+    // CORS 에러 감지 및 사용자 안내
+    const isCORS = e instanceof TypeError && e.message.includes('fetch');
+    const isFileProtocol = window.location.protocol === 'file:';
+    
+    if (isFileProtocol || isCORS) {
+      showToast(
+        '⚠️ CSV 데이터를 불러올 수 없습니다.<br>' +
+        '원인: <code>file://</code> 프로토콜로 열면 CORS 정책상 로컬 파일 접근이 차단됩니다.<br>' +
+        '해결: 정적 서버로 실행하세요 (예: PowerShell 서버 <code>C:\\Windows\\Temp\\helpycode_tcp_serve.ps1</code>)<br>' +
+        '또는 VS Code "Live Server" 확장 사용',
+        'error',
+        15000
+      );
+    } else {
+      showToast('읍면동 데이터 로드 실패: ' + e.message, 'error', 8000);
+    }
   }
+}
+
+// 토스트 알림 함수
+function showToast(message, type = 'info', duration = 5000) {
+  const container = document.getElementById('toastContainer') || createToastContainer();
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = message;
+  container.appendChild(toast);
+  
+  // 애니메이션
+  requestAnimationFrame(() => toast.classList.add('show'));
+  
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+function createToastContainer() {
+  const container = document.createElement('div');
+  container.id = 'toastContainer';
+  container.style.cssText = `
+    position: fixed; top: 20px; right: 20px; z-index: 9999;
+    display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+  `;
+  document.body.appendChild(container);
+  return container;
+}
+
+// CSV 파싱 헬퍼 ( PapaParse 없이 간단한 구현 - 복잡한 필드 처리 개선 )
+function parseCSV(text) {
+  // CRLF 처리: \r 제거 후 라인 분리
+  const lines = text.trim().replace(/\r/g, '').split('\n');
+  if (lines.length < 2) return [];
+  
+  const headers = parseCSVLine(lines[0]).map(h => h.trim());
+  const result = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    const values = parseCSVLine(lines[i]).map(v => v.trim());
+    if (values.length === headers.length) {
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = values[idx]; });
+      // 숫자 필드 변환
+      if (obj.pop) obj.pop = Number(obj.pop);
+      if (obj.male_pop) obj.male_pop = Number(obj.male_pop);
+      if (obj.female_pop) obj.female_pop = Number(obj.female_pop);
+      if (obj.household) obj.household = Number(obj.household);
+      if (obj.avg_household) obj.avg_household = Number(obj.avg_household);
+      if (obj.area_km2) obj.area_km2 = Number(obj.area_km2);
+      if (obj.elder) obj.elder = Number(obj.elder);
+      if (obj.elder_rate) obj.elder_rate = Number(obj.elder_rate);
+      if (obj.foreigner) obj.foreigner = Number(obj.foreigner);
+      if (obj.advisory_2024) obj.advisory_2024 = Number(obj.advisory_2024);
+      if (obj.warning_2024) obj.warning_2024 = Number(obj.warning_2024);
+      if (obj.lat) obj.lat = Number(obj.lat);
+      if (obj.lng) obj.lng = Number(obj.lng);
+      result.push(obj);
+    } else {
+      console.warn(`CSV line ${i+1} column mismatch: expected ${headers.length}, got ${values.length}`);
+    }
+  }
+  return result;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const next = line[i + 1];
+    
+    if (ch === '"') {
+      if (inQuotes && next === '"') {
+        // Escaped quote
+        current += '"';
+        i++; // skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
 }
 
 function initMap() {
@@ -630,12 +769,19 @@ function renderSidoPolygons() {
 function renderSigunguPolygons() {
   // 해당 시군구의 읍면동들 표시 (JSON 데이터 우선, 없으면 생성)
   const data = window.EUPMYEON_DATA || [];
-  const filtered = data.filter(d => d.sigungu === selectedSigungu);
+  const sido = SIDOS.find(s => s.code === selectedSido);
+  const filtered = data.filter(d => 
+    d.sigungu === selectedSigungu && 
+    d.sido === (sido?.name || '') &&
+    d.adm_cd &&
+    !d.adm_cd.toString().endsWith('000000') &&
+    !d.eupmyeondong.includes('전체')
+  );
   
   let items = filtered;
   if (filtered.length === 0) {
     // 데이터 없으면 생성
-    const sidoName = SIDOS.find(s => s.code === selectedSido)?.name || '';
+    const sidoName = sido?.name || '';
     items = generateEupmyeonNames(selectedSigungu, sidoName);
   }
   
@@ -646,9 +792,9 @@ function renderSigunguPolygons() {
       name: d.eupmyeondong,
       gu: selectedSigungu,
       center: [d.lat, d.lng],
-      pop: 20000,
-      elder: 3000,
-      elderRate: 15,
+      pop: d.pop || 20000,
+      elder: d.elder || 3000,
+      elderRate: d.elder_rate || 15,
       lowland: 10,
       riverDist: 1.0,
       floodHist: [],
@@ -663,12 +809,19 @@ function renderEupmyeonPolygons() {
   if (!selectedSigungu) return;
   
   const data = window.EUPMYEON_DATA || [];
-  const filtered = data.filter(d => d.sigungu === selectedSigungu);
+  const sido = SIDOS.find(s => s.code === selectedSido);
+  const filtered = data.filter(d => 
+    d.sigungu === selectedSigungu && 
+    d.sido === (sido?.name || '') &&
+    d.adm_cd &&
+    !d.adm_cd.toString().endsWith('000000') &&
+    !d.eupmyeondong.includes('전체')
+  );
   
   let items = filtered;
   if (filtered.length === 0) {
     // 데이터 없으면 생성
-    const sidoName = SIDOS.find(s => s.code === selectedSido)?.name || '';
+    const sidoName = sido?.name || '';
     items = generateEupmyeonNames(selectedSigungu, sidoName);
   }
   
@@ -678,9 +831,9 @@ function renderEupmyeonPolygons() {
       name: d.eupmyeondong,
       gu: selectedSigungu,
       center: [d.lat, d.lng],
-      pop: 20000,
-      elder: 3000,
-      elderRate: 15,
+      pop: d.pop || 20000,
+      elder: d.elder || 3000,
+      elderRate: d.elder_rate || 15,
       lowland: 10,
       riverDist: 1.0,
       floodHist: [],
@@ -787,12 +940,23 @@ let sigunguBoundsLayer = null;
 function showSigunguBounds(eupmyeonData) {
   clearSigunguBounds();
   
+  // 요약 행 제외
+  const validData = eupmyeonData.filter(d => 
+    d.adm_cd && 
+    !d.adm_cd.toString().endsWith('000000') &&
+    !d.eupmyeondong.includes('전체')
+  );
+  
   sigunguBoundsLayer = L.layerGroup().addTo(map);
   const boundsList = [];
   
-  eupmyeonData.forEach(d => {
-    // 실제 좌표 기반으로 겹치지 않는 경계 계산
-    const bounds = calculateEupmyeonBounds(d);
+  // CSV 데이터에서 해당 시군구의 상세 정보 매핑
+  const csvData = window.EUPMYEON_DATA || [];
+  
+  validData.forEach((d, idx) => {
+    // 실제 좌표 기반으로 겹치지 않는 경계 계산 (인덱스 전달로 그리드 배치)
+    // CSV 데이터에 lat/lng가 없으면 calculateEupmyeonBounds에서 center 속성 사용
+    const bounds = calculateEupmyeonBounds(d, idx, eupmyeonData.length);
     boundsList.push(bounds);
     
     const rect = L.rectangle(bounds, {
@@ -800,12 +964,34 @@ function showSigunguBounds(eupmyeonData) {
     });
     // 데이터 저장
     rect.eupmyeonData = d;
-    // 툴팁 바인딩 (마우스 위치에 표시)
-    const tooltipContent = `
-      <strong>${d.sigungu} ${d.eupmyeondong}</strong><br>
-      위험도: ${getRiskLevel(calcRiskScore({...d, gu: d.sigungu, name: d.eupmyeondong, pop: d.pop || 20000, elder: d.elder || 3000, elderRate: d.elderRate || 15, lowland: d.lowland || 10, riverDist: d.riverDist || 1.0, floodHist: d.floodHist || []}, currentRiskType)).level}<br>
-      인구: ${(d.pop || 20000).toLocaleString()}명 / 고령: ${d.elderRate || 15}%
-    `;
+    
+    // CSV에서 해당 읍면동의 상세 데이터 찾기 (시도+시군구+읍면동으로 매칭)
+    const csvMatch = csvData.find(c => 
+      c.eupmyeondong === d.eupmyeondong && c.sigungu === d.sigungu && c.sido === d.sido
+    );
+    
+    // 툴팁 콘텐츠 구성 (CSV 데이터 활용)
+    let tooltipContent = '';
+    if (csvMatch) {
+      tooltipContent = `
+        <strong>${csvMatch.sigungu} ${csvMatch.eupmyeondong}</strong><br>
+        <span style="color:#666">행정동코드: ${csvMatch.adm_cd}</span><br>
+        위험도: ${getRiskLevel(calcRiskScore({...csvMatch, gu: csvMatch.sigungu, name: csvMatch.eupmyeondong, pop: Number(csvMatch.pop) || 20000, elder: Number(csvMatch.elder) || 3000, elderRate: Number(csvMatch.elder_rate) || 15, lowland: 10, riverDist: 1.0, floodHist: []}, currentRiskType)).level}<br>
+        인구: ${Number(csvMatch.pop || 0).toLocaleString()}명<br>
+        고령: ${Number(csvMatch.elder || 0).toLocaleString()}명 (${Number(csvMatch.elder_rate || 0)}%)<br>
+        면적: ${Number(csvMatch.area_km2 || 0).toLocaleString()} km²<br>
+        최근 재난: ${csvMatch.recent_disaster_date || '없음'} (${csvMatch.disaster_type || '-'})<br>
+        피해규모: ${csvMatch.damage_scale || '기록 없음'}
+      `;
+    } else {
+      // 폴백: 기본 데이터 사용
+      tooltipContent = `
+        <strong>${d.sigungu} ${d.eupmyeondong}</strong><br>
+        위험도: ${getRiskLevel(calcRiskScore({...d, gu: d.sigungu, name: d.eupmyeondong, pop: d.pop || 20000, elder: d.elder || 3000, elderRate: d.elderRate || 15, lowland: d.lowland || 10, riverDist: d.riverDist || 1.0, floodHist: d.floodHist || []}, currentRiskType)).level}<br>
+        인구: ${(d.pop || 20000).toLocaleString()}명 / 고령: ${d.elderRate || 15}%
+      `;
+    }
+    
     rect.bindTooltip(tooltipContent, {
       sticky: true,
       direction: 'top',
@@ -823,30 +1009,106 @@ function showSigunguBounds(eupmyeonData) {
   // }
 }
 
-// 읍면동별 실제 좌표 기반 경계 계산 (겹침 방지)
-function calculateEupmyeonBounds(d) {
+// 읍면동별 실제 좌표 기반 경계 계산 (겹침 방지 - 그리드 배치)
+function calculateEupmyeonBounds(d, index = 0, totalCount = 1) {
   const [lat, lng] = d.center || [d.lat, d.lng];
-  // 기본 크기 (약 500m x 500m)
-  const baseLat = 0.0045;
-  const baseLng = 0.0055;
   
-  // 데이터에 인접 읍면동이 있으면 간격 조정
+  // 기본 크기 축소 (약 300m x 300m → 더 작게)
+  const baseLat = 0.0027;  // 0.0045 → 0.0027 (40% 축소)
+  const baseLng = 0.0033;  // 0.0055 → 0.0033 (40% 축소)
+  
+  // 데이터에 인접 읍면동이 있으면 간격 조정 (시도+시군구로 필터링, 요약 행 제외)
   const data = window.EUPMYEON_DATA || [];
-  const siblingCount = data.filter(x => x.sigungu === d.sigungu).length;
+  const siblingCount = data.filter(x => 
+    x.sigungu === d.sigungu && 
+    x.sido === d.sido &&
+    x.adm_cd &&
+    !x.adm_cd.toString().endsWith('000000') &&
+    !x.eupmyeondong.includes('전체')
+  ).length;
+  const effectiveTotal = Math.max(totalCount, siblingCount);
   
-  // 읍면동 수가 많으면 더 작게
-  const scale = siblingCount > 20 ? 0.7 : siblingCount > 10 ? 0.85 : 1.0;
+  // 읍면동 수가 많으면 더 작게 (더 공격적인 스케일링)
+  let scale;
+  if (effectiveTotal > 25) scale = 0.5;
+  else if (effectiveTotal > 15) scale = 0.6;
+  else if (effectiveTotal > 10) scale = 0.7;
+  else if (effectiveTotal > 6) scale = 0.8;
+  else scale = 0.9;
   
+  // 그리드 배치로 겹침 방지
+  // 3열 그리드 기준으로 행/열 계산
+  const cols = Math.min(3, effectiveTotal);
+  const rows = Math.ceil(effectiveTotal / cols);
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  
+  // 그리드 간격 (크기의 1.5배로 여백 확보)
+  const gridLat = baseLat * scale * 1.5;
+  const gridLng = baseLng * scale * 1.5;
+  
+  // 중심에서 그리드 오프셋 적용
+  const latOffset = (row - (rows - 1) / 2) * gridLat;
+  const lngOffset = (col - (cols - 1) / 2) * gridLng;
+  
+  const finalLat = lat + latOffset;
+  const finalLng = lng + lngOffset;
   const latDelta = baseLat * scale;
   const lngDelta = baseLng * scale;
   
-  return [[lat - latDelta, lng - lngDelta], [lat + latDelta, lng + lngDelta]];
+  return [[finalLat - latDelta, finalLng - lngDelta], [finalLat + latDelta, finalLng + lngDelta]];
 }
 
 function clearSigunguBounds() {
   if (sigunguBoundsLayer) {
     map.removeLayer(sigunguBoundsLayer);
     sigunguBoundsLayer = null;
+  }
+}
+
+// 선택된 읍면동 강조용 레이어
+let selectedEupmyeonBoundsLayer = null;
+
+// 선택된 읍면동만 강조 표시 (빨간색 테두리)
+function showSelectedEupmyeonBounds(d) {
+  clearSelectedEupmyeonBounds();
+  
+  selectedEupmyeonBoundsLayer = L.layerGroup().addTo(map);
+  
+  // 실제 좌표 기반 경계 계산
+  const bounds = calculateEupmyeonBounds(d, 0, 1);
+  
+  const rect = L.rectangle(bounds, {
+    color: '#EF4444', weight: 3, fillColor: '#EF4444', fillOpacity: 0.2, dashArray: '8, 4', interactive: true
+  });
+  
+  // 툴팁
+  const tooltipContent = `
+    <strong>${d.sigungu} ${d.eupmyeondong}</strong> <span style="color:#EF4444;font-weight:bold">[선택됨]</span><br>
+    인구: ${Number(d.pop || 0).toLocaleString()}명<br>
+    고령: ${Number(d.elder || 0).toLocaleString()}명 (${Number(d.elder_rate || 0)}%)
+  `;
+  
+  rect.bindTooltip(tooltipContent, {
+    sticky: true,
+    direction: 'top',
+    offset: [0, -10],
+    opacity: 0.95
+  });
+  
+  selectedEupmyeonBoundsLayer.addLayer(rect);
+  
+  // 해당 읍면동으로 부드럽게 줌인
+  if (d.lat && d.lng) {
+    map.flyTo([d.lat, d.lng], 15, {duration: 1.2});
+  }
+}
+
+// 선택된 읍면동 강조 제거
+function clearSelectedEupmyeonBounds() {
+  if (selectedEupmyeonBoundsLayer) {
+    map.removeLayer(selectedEupmyeonBoundsLayer);
+    selectedEupmyeonBoundsLayer = null;
   }
 }
 
@@ -1226,23 +1488,32 @@ function populateEupmyeonSelect() {
   select.innerHTML = '<option value="">읍면동 선택</option>';
   select.disabled = true;
   
-  if (!selectedSigungu) return;
+  if (!selectedSigungu || !selectedSido) return;
   
-  // Use loaded EUPMYEON_DATA (from korea-eupmyeon-names.json)
+  // Use loaded EUPMYEON_DATA (from CSV)
   const data = window.EUPMYEON_DATA || [];
-  const filtered = data.filter(d => d.sigungu === selectedSigungu);
+  const sido = SIDOS.find(s => s.code === selectedSido);
+  
+  // 요약 행 제외 (adm_cd가 000000으로 끝나거나 eupmyeondong에 "전체" 포함)
+  const filtered = data.filter(d => 
+    d.sigungu === selectedSigungu && 
+    d.sido === (sido?.name || '') &&
+    d.adm_cd && 
+    !d.adm_cd.toString().endsWith('000000') &&
+    !d.eupmyeondong.includes('전체')
+  );
   
   // 데이터가 없으면 임의로 생성
   let items = filtered;
   if (filtered.length === 0) {
-    const sidoName = SIDOS.find(s => s.code === selectedSido)?.name || '';
+    const sidoName = sido?.name || '';
     items = generateEupmyeonNames(selectedSigungu, sidoName);
     console.log(`[생성] ${selectedSigungu} 읍면동 ${items.length}개 생성됨`);
   }
   
   items.forEach(d => {
     const opt = document.createElement('option');
-    opt.value = JSON.stringify({name: d.eupmyeondong, lat: d.lat, lng: d.lng, adm_cd: d.adm_cd});
+    opt.value = JSON.stringify({name: d.eupmyeondong, lat: d.lat, lng: d.lng, adm_cd: d.adm_cd, pop: d.pop, elder: d.elder, elder_rate: d.elder_rate, area_km2: d.area_km2, recent_disaster_date: d.recent_disaster_date, disaster_type: d.disaster_type, damage_scale: d.damage_scale});
     opt.textContent = d.eupmyeondong;
     select.appendChild(opt);
   });
@@ -1273,7 +1544,8 @@ function bindEvents() {
     selectedSigungu = null;
     selectedEupmyeon = null;
     selectedRegion = null;
-    clearSigunguBounds(); // 시군구 경계 제거
+    clearSigunguBounds(); // 시군구 경계(노란 점선) 제거
+    clearSelectedEupmyeonBounds(); // 선택된 읍면동 경계(빨간 실선) 제거
     
     // 지도에서 해당 시도로 확대
     if (selectedSido) {
@@ -1289,24 +1561,40 @@ function bindEvents() {
   // 시군구 선택
   document.getElementById('sigunguSelect').addEventListener('change', (e) => {
     selectedSigungu = e.target.value;
+    console.log('[DEBUG] 시군구 선택:', selectedSigungu, '시도:', selectedSido);
     populateEupmyeonSelect();
     document.getElementById('eupmyeonSelect').value = '';
     selectedEupmyeon = null;
     selectedRegion = null;
+    clearSelectedEupmyeonBounds(); // 이전 선택된 읍면동 강조 제거
     
     // 시군구 선택 시: 해당 시군구로 줌인 + 읍면동 노란 경계 표시
     if (selectedSigungu && selectedSido) {
       const sido = SIDOS.find(s => s.code === selectedSido);
       if (sido) {
-        // 해당 시군구의 읍면동 데이터로 중심점 계산
+        // 해당 시군구의 읍면동 데이터로 중심점 계산 (시도도 함께 매칭하여 교차 매칭 방지)
         const data = window.EUPMYEON_DATA || [];
-        const filtered = data.filter(d => d.sigungu === selectedSigungu);
+        console.log('[DEBUG] EUPMYEON_DATA length:', data.length);
+        console.log('[DEBUG] Unique sigungu in data:', [...new Set(data.map(d => d.sigungu))]);
         
+        // 요약 행 제외 (adm_cd가 000000으로 끝나거나 eupmyeondong에 "전체" 포함)
+        const validData = data.filter(d => 
+          d.sigungu === selectedSigungu && 
+          d.sido === sido.name &&
+          d.adm_cd && 
+          !d.adm_cd.toString().endsWith('000000') &&
+          !d.eupmyeondong.includes('전체')
+        );
+        
+        let filtered = validData;
+        console.log('[DEBUG] Filtered count for', selectedSigungu, 'in', sido.name, ':', filtered.length);
+        
+        // CSV 데이터의 실제 lat/lng 사용 (이미 있음)
         if (filtered.length > 0) {
-          // 실제 데이터가 있는 경우: 중심점 계산 후 flyTo
-          const avgLat = filtered.reduce((sum, d) => sum + d.lat, 0) / filtered.length;
-          const avgLng = filtered.reduce((sum, d) => sum + d.lng, 0) / filtered.length;
-          map.flyTo([avgLat, avgLng], 12, {duration: 1.5});
+          // 이미 lat/lng가 있음 - 그대로 사용
+          const avgLat = filtered.reduce((sum, d) => sum + (d.lat || 0), 0) / filtered.length;
+          const avgLng = filtered.reduce((sum, d) => sum + (d.lng || 0), 0) / filtered.length;
+          map.flyTo([avgLat, avgLng], 13, {duration: 1.5});
           
           // 노란 사각형 경계 표시 (읍면동 범위 - 겹치지 않게 실제 좌표 사용)
           showSigunguBounds(filtered);
@@ -1334,45 +1622,102 @@ function bindEvents() {
     if (selectedEupmyeon) {
       try {
         const d = JSON.parse(selectedEupmyeon);
-        // 1. ADMIN_DONGS에서 찾기 (서울 샘플 데이터)
-        let found = ADMIN_DONGS.find(x => x.name === d.name && x.gu === selectedSigungu);
-        if (found) {
-          found.center = [d.lat, d.lng];
-          selectRegion(found);
+        
+        // 1. CSV 데이터(EUPMYEON_DATA)에서 먼저 찾기 - 모든 지역에 대해 상세 데이터 사용
+        const csvData = window.EUPMYEON_DATA || [];
+        const csvMatch = csvData.find(x => x.eupmyeondong === d.name && x.sigungu === selectedSigungu);
+        
+        let region;
+        if (csvMatch) {
+          // CSV 데이터로 상세 지역 객체 구성
+          region = {
+            id: csvMatch.adm_cd || 'csv_' + d.name,
+            name: csvMatch.eupmyeondong,
+            gu: selectedSigungu,
+            center: [csvMatch.lat, csvMatch.lng],
+            pop: csvMatch.pop || 20000,
+            elder: csvMatch.elder || 3000,
+            elderRate: csvMatch.elder_rate || 15,
+            lowland: 10, // CSV에 lowland 필드 없음
+            riverDist: 1.0, // CSV에 riverDist 필드 없음
+            floodHist: csvMatch.recent_disaster_date ? [{y: new Date(csvMatch.recent_disaster_date).getFullYear(), d: 30}] : [],
+            shelters: [{name: csvMatch.eupmyeondong + ' 주민센터', dist: 300, cap: 500}]
+          };
         } else {
-          // 2. NATIONWIDE_MOCK_DATA에서 찾기 (전국 주요 시군구)
-          const mockFound = NATIONWIDE_MOCK_DATA.find(x => x.name === d.name && x.gu === selectedSigungu);
-          if (mockFound) {
-            mockFound.center = [d.lat, d.lng];
-            selectRegion(mockFound);
+          // 2. ADMIN_DONGS에서 찾기 (서울 샘플 데이터)
+          let found = ADMIN_DONGS.find(x => x.name === d.name && x.gu === selectedSigungu);
+          if (found) {
+            found.center = [d.lat, d.lng];
+            region = found;
           } else {
-            // 3. 둘 다 없으면 기본 객체 생성
-            const region = {
-              id: 'loaded_' + d.adm_cd,
-              name: d.name,
-              gu: selectedSigungu,
-              center: [d.lat, d.lng],
-              pop: 20000,
-              elder: 3000,
-              elderRate: 15,
-              lowland: 10,
-              riverDist: 1.0,
-              floodHist: [],
-              shelters: [{name: d.name + ' 주민센터', dist: 300, cap: 500}]
-            };
-            selectRegion(region);
+            // 3. NATIONWIDE_MOCK_DATA에서 찾기 (전국 주요 시군구)
+            const mockFound = NATIONWIDE_MOCK_DATA.find(x => x.name === d.name && x.gu === selectedSigungu);
+            if (mockFound) {
+              mockFound.center = [d.lat, d.lng];
+              region = mockFound;
+            } else {
+              // 4. 둘 다 없으면 기본 객체 생성
+              region = {
+                id: 'loaded_' + d.adm_cd,
+                name: d.name,
+                gu: selectedSigungu,
+                center: [d.lat, d.lng],
+                pop: d.pop || 20000,
+                elder: d.elder || 3000,
+                elderRate: d.elder_rate || 15,
+                lowland: 10,
+                riverDist: 1.0,
+                floodHist: [],
+                shelters: [{name: d.name + ' 주민센터', dist: 300, cap: 500}]
+              };
+            }
           }
+        }
+        selectRegion(region);
+        
+        // 읍면동 선택 시: 시군구 노란 경계(점선) 숨기고, 선택된 읍면동만 빨간 실선 경계 표시
+        clearSigunguBounds();
+        
+        const data = window.EUPMYEON_DATA || [];
+        const sido = SIDOS.find(s => s.code === selectedSido);
+        const selectedDongData = data.find(x => 
+          x.eupmyeondong === d.name && 
+          x.sigungu === selectedSigungu &&
+          x.sido === (sido?.name || '') &&
+          x.adm_cd &&
+          !x.adm_cd.toString().endsWith('000000') &&
+          !x.eupmyeondong.includes('전체')
+        );
+        if (selectedDongData && selectedDongData.lat && selectedDongData.lng) {
+          // 해당 읍면동만 강조 표시 (빨간 실선)
+          showSelectedEupmyeonBounds(selectedDongData);
         }
       } catch (e) {
         console.warn('Eupmyeon parse failed:', e);
       }
     } else {
-      // 읍면동 선택 해제 시 시군구 경계 제거 + 상세 패널 초기화
-      clearSigunguBounds();
+      // 읍면동 선택 해제 시: 선택된 읍면동 강조 제거 + 시군구 노란 경계(점선) 다시 표시
+      clearSelectedEupmyeonBounds();
       selectedRegion = null;
       updateDetailPanel();
       updateChart();
       updateAlertBanner();
+      
+      // 시군구가 선택되어 있으면 해당 시군구의 노란 경계 다시 표시
+      if (selectedSigungu && selectedSido) {
+        const data = window.EUPMYEON_DATA || [];
+        const sido = SIDOS.find(s => s.code === selectedSido);
+        const filtered = data.filter(x => 
+          x.sigungu === selectedSigungu && 
+          x.sido === (sido?.name || '') &&
+          x.adm_cd &&
+          !x.adm_cd.toString().endsWith('000000') &&
+          !x.eupmyeondong.includes('전체')
+        );
+        if (filtered.length > 0) {
+          showSigunguBounds(filtered);
+        }
+      }
     }
   });
 
