@@ -703,6 +703,7 @@ function initMap() {
 
   // 맵에서 마우스가 벗어나면 상세 패널 초기화
   map.on('mouseleave', () => {
+    map.closeTooltip(); // 맵 벗어날 때 모든 툴팁 닫기
     if (!selectedEupmyeon) {
       selectedRegion = null;
       updateDetailPanel();
@@ -854,7 +855,7 @@ function addRiskPolygon(d) {
   poly.riskScore = score;
   poly.on('click', onDongClick);
   poly.on('mouseover', e => { e.target.setStyle({weight:3, fillOpacity:0.65}); showTooltip(e.target, d, score, level); });
-  poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.45}); map.closeTooltip(); });
+  poly.on('mouseout', e => { e.target.setStyle({weight:1, fillOpacity:0.45}); e.target.closeTooltip(); map.closeTooltip(); });
   riskLayer.addLayer(poly);
   return poly;
 }
@@ -1033,6 +1034,10 @@ function showSigunguBounds(eupmyeonData) {
       offset: [0, -10],
       opacity: 0.95
     });
+    // 마우스 아웃 시 툴팁 강제 닫기
+    rect.on('mouseout', function(e) {
+      this.closeTooltip();
+    });
     sigunguBoundsLayer.addLayer(rect);
   });
   
@@ -1129,6 +1134,10 @@ function showSelectedEupmyeonBounds(d) {
     direction: 'top',
     offset: [0, -10],
     opacity: 0.95
+  });
+  // 마우스 아웃 시 툴팁 강제 닫기
+  rect.on('mouseout', function(e) {
+    this.closeTooltip();
   });
   
   selectedEupmyeonBoundsLayer.addLayer(rect);
