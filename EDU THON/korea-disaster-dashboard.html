@@ -264,6 +264,10 @@ a:hover{text-decoration:underline}
           </select>
         </div>
         <div class="chart-area"><canvas id="riskChart"></canvas></div>
+        <div class="detail-section" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+          <div class="detail-section-title">위험도 분석 (AI 예측)</div>
+          <div class="risk-factors" id="riskFactorsChart"></div>
+        </div>
       </article>
       <article class="chart-card detail-panel">
         <div class="detail-title" id="detailTitle">지역 상세 정보 <span id="detailRegion" style="font-weight:400;color:var(--muted)"></span></div>
@@ -278,10 +282,6 @@ a:hover{text-decoration:underline}
             <div class="detail-row"><span class="detail-label">고령 비율</span><span class="detail-value" id="dElderRate">-</span></div>
             <div class="detail-row"><span class="detail-label">저지대 비율</span><span class="detail-value" id="dLowland">-</span></div>
             <div class="detail-row"><span class="detail-label">하천 인접도</span><span class="detail-value" id="dRiver">-</span></div>
-          </div>
-          <div class="detail-section">
-            <div class="detail-section-title">위험도 분석 (AI 예측)</div>
-            <div class="risk-factors" id="riskFactors"></div>
           </div>
 <div class="detail-section">
               <div class="detail-section-title">재난 이력</div>
@@ -1283,9 +1283,12 @@ function updateDetailPanel() {
       ]
     };
     const factors = riskFactors[currentRiskType] || riskFactors.flood;
-    document.getElementById('riskFactors').innerHTML = factors.map(f => 
+    const riskHtml = factors.map(f => 
       '<div class="risk-factor"><span class="risk-factor-label">'+f.label+'</span><div class="risk-factor-bar"><div class="risk-factor-fill" style="width:'+Math.min((f.value/f.max)*100, 100)+'%;background:'+getColor(score)+'"></div></div><span class="risk-factor-value">'+Math.round(f.value)+'</span></div>'
     ).join('');
+    document.getElementById('riskFactors').innerHTML = riskHtml;
+    document.getElementById('riskFactorsChart').innerHTML = riskHtml;
+    document.getElementById('riskFactorsChart').innerHTML = riskHtml;
 
     // 대피소 상세 (routeInfo)
     routeInfo.style.display = shelters.length ? 'flex' : 'none';
@@ -1368,7 +1371,7 @@ function updateDetailPanel() {
         ]
       };
       const f = factors[currentRiskType] || factors.flood;
-      document.getElementById('riskFactors').innerHTML = f.map(f => 
+      const riskHtml = f.map(f => 
         '<div class="risk-factor"><span class="risk-factor-label">'+f.label+'</span><div class="risk-factor-bar"><div class="risk-factor-fill" style="width:'+Math.min((f.value/f.max)*100, 100)+'%;background:'+getColor(score)+'"></div></div><span class="risk-factor-value">'+Math.round(f.value)+'</span></div>'
       ).join('');
       
