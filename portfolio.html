@@ -536,6 +536,7 @@
       const emptyEl = document.getElementById('chatbotEmpty');
 
       let isOpen = false;
+      let isFirstOpen = true;
 
       function openChatbot() {
         isOpen = true;
@@ -544,6 +545,30 @@
         toggleBtn.setAttribute('aria-expanded', 'true');
         toggleBtn.setAttribute('aria-label', '상담 닫기');
         inputEl.focus();
+
+        // 첫 열림 시 인사말 표시
+        if (isFirstOpen && emptyEl) {
+          isFirstOpen = false;
+          showGreeting();
+        }
+      }
+
+      function showGreeting() {
+        if (emptyEl) emptyEl.remove();
+        const greeting = document.createElement('div');
+        greeting.className = 'chatbot-message bot';
+        greeting.innerHTML = `
+          <div class="chatbot-avatar">봇</div>
+          <div class="chatbot-bubble">
+            안녕하세요! 황진아 개발자 포트폴리오 안내원입니다.<br>
+            이 페이지에 대해 궁금한 걸 물어봐 주세요.<br><br>
+            <span style="color: var(--mute); font-size: 12px;">예시 질문:</span><br>
+            <span class="pill pill-purple" style="cursor:pointer; margin-right: 4px;" onclick="document.getElementById('chatbotInput').value='어떤 기술 스택을 쓰나요?'; document.getElementById('chatbotSend').click();">어떤 기술 스택을 쓰나요?</span>
+            <span class="pill pill-red" style="cursor:pointer;" onclick="document.getElementById('chatbotInput').value='대표 프로젝트 하나만 소개해 주세요'; document.getElementById('chatbotSend').click();">대표 프로젝트 소개해 주세요</span>
+          </div>
+        `;
+        messagesEl.appendChild(greeting);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
       }
 
       function closeChatbot() {
