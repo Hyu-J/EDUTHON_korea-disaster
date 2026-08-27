@@ -1028,7 +1028,7 @@ function showSigunguBounds(eupmyeonData) {
     }
     
     rect.bindTooltip(tooltipContent, {
-      sticky: true,
+      sticky: false,
       direction: 'top',
       offset: [0, -10],
       opacity: 0.95
@@ -1125,7 +1125,7 @@ function showSelectedEupmyeonBounds(d) {
   `;
   
   rect.bindTooltip(tooltipContent, {
-    sticky: true,
+    sticky: false,
     direction: 'top',
     offset: [0, -10],
     opacity: 0.95
@@ -1149,7 +1149,7 @@ function clearSelectedEupmyeonBounds() {
 
 function showTooltip(layer, d, score, level) {
   const tooltip = '<strong>'+d.gu+' '+d.name+'</strong><br>위험도: <span style="color:'+level.color+'">'+score+'점 ('+level.level+')</span><br>인구: '+d.pop.toLocaleString()+'명 / 고령: '+Math.round(d.elderRate)+'%';
-  layer.bindTooltip(tooltip, {direction:'top', offset:[0,-10], sticky:true}).openTooltip();
+  layer.bindTooltip(tooltip, {direction:'top', offset:[0,-10], sticky:false}).openTooltip();
 }
 
 function onDongClick(e) { selectRegion(e.target.dongData); }
@@ -1476,33 +1476,81 @@ function populateSigunguSelect() {
 
 // 읍면동명 생성기 (데이터 없는 지역용)
 function generateEupmyeonNames(sigungu, sidoName) {
-  const isRural = sigungu.includes('군') || sigungu.includes('읍') || sigungu.includes('면');
-  const baseNames = [];
+  // 대구광역시 북구 실제 동명 매핑
+  const knownDongs = {
+    '대구광역시_북구': [
+      '고성동', '산격동', '칠성동', '침산동', '노원동', 
+      '서변동', '연경동', '동천동', '동호동', '검단동',
+      '금호동', '구암동', '관음동', '태전동', '매천동',
+      '동변동', '대현동', '복현동', '산격1동', '산격2동',
+      '산격3동', '산격4동', '노원동', '침산1동', '침산2동',
+      '침산3동', '고성동', '칠성동', '동천동', '동호동'
+    ],
+    '대구광역시_달서구': [
+      '성당동', '두류동', '감삼동', '죽전동', '장기동',
+      '용산동', '이곡동', '신당동', '월성동', '진천동',
+      '상인동', '도원동', '송현동', '본동', '본리동'
+    ],
+    '대구광역시_수성구': [
+      '범어동', '만촌동', '황금동', '수성동', '중동',
+      '상동', '파동', '두산동', '지산동', '범물동',
+      '고산동', '시지동', '신매동', '욱수동', '노변동'
+    ],
+    '광주광역시_북구': [
+      '중흥동', '중앙동', '임동', '신안동', '용봉동',
+      '운암동', '동림동', '서강동', '매곡동', '오치동',
+      '두암동', '풍향동', '문흥동', '각화동', '용두동',
+      '태령동', '일곡동', '매곡동', '오치동', '본촌동'
+    ],
+    '울산광역시_북구': [
+      '농소동', '강동동', '효문동', '진장동', '가대동',
+      '당사동', '신명동', '명촌동', '중산동', '연암동',
+      '어물동', '정자동', '산하동', '호계동', '천곡동'
+    ],
+    '부산광역시_북구': [
+      '구포동', '금곡동', '화명동', '덕천동', '만덕동',
+      '덕천1동', '덕천2동', '덕천3동', '만덕1동', '만덕2동',
+      '만덕3동', '화명1동', '화명2동', '화명3동', '구포1동',
+      '구포2동', '구포3동', '금곡동', '대저동', '명지동'
+    ]
+  };
   
-  if (isRural) {
-    // 읍/면 단위 지역명 패턴
-    const eupPatterns = ['읍', '면'];
-    const prefixes = ['중앙', '동부', '서부', '남부', '북부', '내륙', '해안', '산간', '평야', '강변'];
-    const suffixes = ['일', '이', '삼', '사'];
-    
-    // 기본 1개 읍/면
-    baseNames.push(sigungu.replace('군', '읍').replace('시', '읍'));
-    
-    // 추가 면 단위
-    for (let i = 0; i < 3; i++) {
-      const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-      const suffix = suffixes[i % suffixes.length];
-      baseNames.push(`${prefix}${suffix}면`);
-    }
+  const key = `${sidoName}_${sigungu}`;
+  const known = knownDongs[key];
+  
+  let baseNames = [];
+  
+  if (known) {
+    // 알려진 실제 동명 사용
+    baseNames = known.slice(0, 20); // 최대 20개
   } else {
-    // 동 단위 지역명 패턴
-    const dongPrefixes = ['중앙', '신도시', '구도심', '주거', '상업', '공단', '대학', '역세권', '강변', '산자락', '신흥', '구'];
-    const dongSuffixes = ['1동', '2동', '3동', '4동', '5동'];
+    const isRural = sigungu.includes('군') || sigungu.includes('읍') || sigungu.includes('면');
     
-    for (let i = 0; i < 5; i++) {
-      const prefix = dongPrefixes[Math.floor(Math.random() * dongPrefixes.length)];
-      const suffix = dongSuffixes[i % dongSuffixes.length];
-      baseNames.push(`${prefix}${suffix}`);
+    if (isRural) {
+      // 읍/면 단위 지역명 패턴
+      const eupPatterns = ['읍', '면'];
+      const prefixes = ['중앙', '동부', '서부', '남부', '북부', '내륙', '해안', '산간', '평야', '강변'];
+      const suffixes = ['일', '이', '삼', '사'];
+      
+      // 기본 1개 읍/면
+      baseNames.push(sigungu.replace('군', '읍').replace('시', '읍'));
+      
+      // 추가 면 단위
+      for (let i = 0; i < 3; i++) {
+        const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+        const suffix = suffixes[i % suffixes.length];
+        baseNames.push(`${prefix}${suffix}면`);
+      }
+    } else {
+      // 동 단위 지역명 패턴 (일반적인 패턴)
+      const dongPrefixes = ['중앙', '신도시', '구도심', '주거', '상업', '공단', '대학', '역세권', '강변', '산자락', '신흥', '구'];
+      const dongSuffixes = ['1동', '2동', '3동', '4동', '5동'];
+      
+      for (let i = 0; i < 5; i++) {
+        const prefix = dongPrefixes[Math.floor(Math.random() * dongPrefixes.length)];
+        const suffix = dongSuffixes[i % dongSuffixes.length];
+        baseNames.push(`${prefix}${suffix}`);
+      }
     }
   }
   
