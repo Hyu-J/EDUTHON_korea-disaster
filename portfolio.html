@@ -156,6 +156,50 @@
     @media (max-width: 768px) { :root { --space-9: 64px; --space-8: 48px; --space-7: 40px; --container-pad: 16px; } .hero::before { height: 160px; } .hero::after { height: 100px; } .projects-grid { grid-template-columns: 1fr; } .footer-content { flex-direction: column; text-align: center; } .nav-links { display: none; } }
     @media (max-width: 480px) { .display-xl { font-size: 32px; } .hero-actions { flex-direction: column; width: 100%; } .hero-actions .btn { width: 100%; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } html { scroll-behavior: auto; } .hero::after { display: none; } }
+
+    /* 챗봇 버튼/창 */
+    .chatbot-toggle { position: fixed; right: var(--space-5); bottom: var(--space-5); z-index: 1000; width: 56px; height: 56px; border-radius: var(--radius-full); background: var(--purple); color: var(--on-primary); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(168,149,201,0.3), 0 2px 8px rgba(0,0,0,0.3); border: 2px solid var(--hairline-strong); cursor: pointer; transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast); }
+    .chatbot-toggle:hover { transform: scale(1.05); box-shadow: 0 12px 32px rgba(168,149,201,0.4), 0 4px 12px rgba(0,0,0,0.4); }
+    .chatbot-toggle:focus-visible { outline: 2px solid var(--purple); outline-offset: 3px; }
+    .chatbot-toggle svg { width: 24px; height: 24px; transition: transform var(--transition-fast); }
+    .chatbot-toggle[aria-expanded="true"] svg { transform: rotate(45deg); }
+
+    .chatbot-window { position: fixed; right: var(--space-5); bottom: calc(56px + var(--space-5) + var(--space-3)); z-index: 999; width: 100%; max-width: 360px; height: 480px; max-height: calc(100vh - 80px); background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-xl); box-shadow: 0 24px 48px rgba(0,0,0,0.5), 0 8px 16px rgba(0,0,0,0.3); display: flex; flex-direction: column; overflow: hidden; opacity: 0; visibility: hidden; transform: translateY(20px) scale(0.95); transition: opacity var(--transition-base), visibility var(--transition-base), transform var(--transition-base); }
+    .chatbot-window.is-open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+    .chatbot-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--hairline); background: var(--surface-elevated); }
+    .chatbot-title { font-weight: 600; font-size: 16px; color: var(--ink); }
+    .chatbot-close { width: 32px; height: 32px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; color: var(--mute); background: transparent; border: none; cursor: pointer; transition: background var(--transition-fast), color var(--transition-fast); }
+    .chatbot-close:hover { background: var(--surface-card); color: var(--ink); }
+    .chatbot-close:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+    .chatbot-close svg { width: 20px; height: 20px; }
+    .chatbot-messages { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+    .chatbot-message { display: flex; gap: var(--space-2); max-width: 85%; animation: fadeUp 0.3s ease forwards; }
+    .chatbot-message.bot { align-self: flex-start; }
+    .chatbot-message.user { align-self: flex-end; flex-direction: row-reverse; }
+    .chatbot-avatar { width: 28px; height: 28px; border-radius: var(--radius-full); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .chatbot-message.bot .chatbot-avatar { background: var(--purple-soft); color: var(--purple); }
+    .chatbot-message.user .chatbot-avatar { background: var(--primary); color: var(--on-primary); margin-left: var(--space-2); }
+    .chatbot-bubble { padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+    .chatbot-message.bot .chatbot-bubble { background: var(--surface-elevated); border: 1px solid var(--hairline); color: var(--body); border-bottom-left-radius: var(--space-1); }
+    .chatbot-message.user .chatbot-bubble { background: var(--purple); color: var(--on-primary); border-bottom-right-radius: var(--space-1); }
+    .chatbot-input-area { padding: var(--space-4); border-top: 1px solid var(--hairline); background: var(--surface-elevated); }
+    .chatbot-input-wrapper { display: flex; gap: var(--space-2); }
+    .chatbot-input { flex: 1; height: 44px; padding: 0 var(--space-4); background: var(--surface-card); border: 1px solid var(--hairline); border-radius: var(--radius-full); color: var(--ink); font-size: 14px; transition: border-color var(--transition-fast), box-shadow var(--transition-fast); }
+    .chatbot-input::placeholder { color: var(--ash); }
+    .chatbot-input:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px var(--focus-ring); }
+    .chatbot-send { width: 44px; height: 44px; border-radius: var(--radius-full); background: var(--purple); color: var(--on-primary); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background var(--transition-fast), transform var(--transition-fast); border: none; }
+    .chatbot-send:hover { background: #957ab8; transform: scale(1.02); }
+    .chatbot-send:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+    .chatbot-send svg { width: 20px; height: 20px; }
+    .chatbot-empty { text-align: center; color: var(--mute); font-size: 13px; padding: var(--space-6); }
+
+    @media (max-width: 480px) {
+      .chatbot-toggle { right: var(--space-3); bottom: var(--space-3); width: 52px; height: 52px; }
+      .chatbot-window { right: var(--space-3); left: var(--space-3); bottom: calc(52px + var(--space-3) + var(--space-2)); max-width: none; height: calc(100vh - 120px); max-height: calc(100vh - 120px); border-radius: var(--radius-lg); }
+      .chatbot-header { padding: var(--space-3) var(--space-4); }
+      .chatbot-messages { padding: var(--space-3); }
+      .chatbot-input-area { padding: var(--space-3); }
+    }
   </style>
 </head>
 <body>
@@ -422,6 +466,33 @@
       </div>
     </footer>
   </main>
+
+  <!-- 챗봇 버튼 -->
+  <button class="chatbot-toggle" id="chatbotToggle" aria-label="상담 열기" aria-expanded="false" aria-controls="chatbotWindow">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+  </button>
+
+  <!-- 챗봇 창 -->
+  <div class="chatbot-window" id="chatbotWindow" role="dialog" aria-label="상담 챗봇" aria-modal="true" hidden>
+    <header class="chatbot-header">
+      <h2 class="chatbot-title">상담 챗봇</h2>
+      <button class="chatbot-close" id="chatbotClose" aria-label="상담 닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </header>
+    <div class="chatbot-messages" id="chatbotMessages" aria-live="polite">
+      <div class="chatbot-empty" id="chatbotEmpty">대화를 시작해 보세요.</div>
+    </div>
+    <div class="chatbot-input-area">
+      <div class="chatbot-input-wrapper">
+        <input type="text" class="chatbot-input" id="chatbotInput" placeholder="메시지를 입력하세요..." aria-label="메시지 입력" autocomplete="off">
+        <button class="chatbot-send" id="chatbotSend" aria-label="보내기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (!prefersReducedMotion) {
@@ -450,6 +521,97 @@
         }
       });
     });
+
+    // 챗봇 기능
+    (function() {
+      const toggleBtn = document.getElementById('chatbotToggle');
+      const windowEl = document.getElementById('chatbotWindow');
+      const closeBtn = document.getElementById('chatbotClose');
+      const inputEl = document.getElementById('chatbotInput');
+      const sendBtn = document.getElementById('chatbotSend');
+      const messagesEl = document.getElementById('chatbotMessages');
+      const emptyEl = document.getElementById('chatbotEmpty');
+
+      let isOpen = false;
+
+      function openChatbot() {
+        isOpen = true;
+        windowEl.hidden = false;
+        windowEl.classList.add('is-open');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        toggleBtn.setAttribute('aria-label', '상담 닫기');
+        inputEl.focus();
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeChatbot() {
+        isOpen = false;
+        windowEl.classList.remove('is-open');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+        toggleBtn.setAttribute('aria-label', '상담 열기');
+        document.body.style.overflow = '';
+        setTimeout(() => {
+          if (!isOpen) windowEl.hidden = true;
+        }, 200);
+      }
+
+      function toggleChatbot() {
+        if (isOpen) closeChatbot();
+        else openChatbot();
+      }
+
+      function addMessage(text, isUser) {
+        if (emptyEl) emptyEl.remove();
+        const msg = document.createElement('div');
+        msg.className = 'chatbot-message' + (isUser ? ' user' : ' bot');
+        const avatar = document.createElement('div');
+        avatar.className = 'chatbot-avatar';
+        avatar.textContent = isUser ? '나' : '봇';
+        const bubble = document.createElement('div');
+        bubble.className = 'chatbot-bubble';
+        bubble.textContent = text;
+        if (isUser) {
+          msg.appendChild(bubble);
+          msg.appendChild(avatar);
+        } else {
+          msg.appendChild(avatar);
+          msg.appendChild(bubble);
+        }
+        messagesEl.appendChild(msg);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
+
+      function sendMessage() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+        addMessage(text, true);
+        inputEl.value = '';
+        // 고정 답변
+        setTimeout(() => {
+          addMessage('준비 중입니다', false);
+        }, 500);
+      }
+
+      toggleBtn.addEventListener('click', toggleChatbot);
+      closeBtn.addEventListener('click', closeChatbot);
+      sendBtn.addEventListener('click', sendMessage);
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      // ESC 키로 닫기
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isOpen) closeChatbot();
+      });
+
+      // 창 외부 클릭 시 닫기 (선택적)
+      windowEl.addEventListener('click', (e) => {
+        if (e.target === windowEl) closeChatbot();
+      });
+    })();
   </script>
 </body>
 </html>
