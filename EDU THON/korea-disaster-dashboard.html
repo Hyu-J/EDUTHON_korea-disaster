@@ -752,19 +752,8 @@ function renderDefaultPolygons() {
 }
 
 function renderSidoPolygons() {
-  // 선택된 시도의 시군구들 표시 (NATIONWIDE_MOCK_DATA 사용)
-  const regions = NATIONWIDE_MOCK_DATA.filter(d => {
-    const sido = SIDOS.find(s => s.code === selectedSido);
-    return sido && sido.sigungus.includes(d.gu);
-  });
-  
-  if (regions.length === 0) {
-    // 폴백: ADMIN_DONGS
-    ADMIN_DONGS.forEach(d => addRiskPolygon(d));
-    return;
-  }
-  
-  regions.forEach(d => addRiskPolygon(d));
+  // 시도 선택 시 시군구 노란 영역 표시 안 함 (사용자 요청)
+  return;
 }
 
 function renderSigunguPolygons() {
@@ -1142,9 +1131,10 @@ function showSelectedEupmyeonBounds(d) {
   
   selectedEupmyeonBoundsLayer.addLayer(rect);
   
-  // 해당 읍면동으로 부드럽게 줌인
+  // 해당 읍면동으로 부드럽게 줌인 (약간 북쪽으로 오프셋하여 영역이 화면 중앙 위쪽에 오도록)
   if (d.lat && d.lng) {
-    map.flyTo([d.lat, d.lng], 15, {duration: 1.2});
+    const offsetLat = d.lat + 0.0035; // 약 390m 북쪽으로 이동
+    map.flyTo([offsetLat, d.lng], 15, {duration: 1.2});
   }
 }
 
