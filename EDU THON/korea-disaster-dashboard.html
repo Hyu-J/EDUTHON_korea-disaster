@@ -1131,9 +1131,9 @@ function showSelectedEupmyeonBounds(d) {
   
   selectedEupmyeonBoundsLayer.addLayer(rect);
   
-  // 해당 읍면동으로 부드럽게 줌인 (약간 북쪽으로 오프셋하여 영역이 화면 중앙 위쪽에 오도록)
+  // 해당 읍면동으로 부드럽게 줌인 (약간 남쪽으로 오프셋하여 영역이 화면 중앙 위쪽에 오도록)
   if (d.lat && d.lng) {
-    const offsetLat = d.lat + 0.0035; // 약 390m 북쪽으로 이동
+    const offsetLat = d.lat - 0.0035; // 약 390m 남쪽으로 이동 (지도가 북쪽으로 이동해 영역이 상대적으로 위로 오도록)
     map.flyTo([offsetLat, d.lng], 15, {duration: 1.2});
   }
 }
